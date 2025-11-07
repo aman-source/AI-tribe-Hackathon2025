@@ -1,52 +1,17 @@
 import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import "./Home.css";
-
-const initialTasks = [
-  {
-    id: 1,
-    name: "Manoj Naidu",
-    story: "Integrate GitHub API",
-    status: "In Development",
-    lead: "John Smith",
-    team: "Mav-CDS",
-    startDate: "2025-11-01",
-    endDate: "2025-11-15",
-    priority: "High"
+import "./Board.css";
+const boardTeams = {
+  "mav-cds": {
+    name: "Mav-CDS",
+    members: ["Manoj Naidu", "Sravani", "Kiran"]
   },
-  {
-    id: 2,
-    name: "Sravani",
-    story: "Design Dashboard UI",
-    status: "Complete",
-    lead: "John Smith",
-    team: "Mav-CDS",
-    startDate: "2025-10-20",
-    endDate: "2025-11-05",
-    priority: "Medium"
-  },
-  {
-    id: 3,
-    name: "Kiran",
-    story: "Setup Redis Caching",
-    status: "Defining Details",
-    lead: "John Smith",
-    team: "Mav-CDS",
-    startDate: "2025-11-10",
-    endDate: "2025-11-20",
-    priority: "Low"
-  },
-  {
-    id: 4,
-    name: "Ravi",
-    story: "Implement Real-time Metrics",
-    status: "In Functional Test",
-    lead: "Sarah Johnson",
-    team: "MAVCVS",
-    startDate: "2025-11-05",
-    endDate: "2025-11-18",
-    priority: "High"
-  },
-];
+  "mavcvs": {
+    name: "MAVCVS",
+    members: ["Ravi", "Priya", "Suresh"]
+  }
+};
 
 const statusOptions = [
   "Defining Details",
@@ -57,42 +22,40 @@ const statusOptions = [
   "Complete"
 ];
 
-// Team configuration with their members
-const teamConfig = {
-  "Mav-CDS": {
-    lead: "John Smith",
-    members: ["Manoj Naidu", "Sravani", "Kiran", "Anil Kumar", "Divya Reddy"]
-  },
-  "MAVCVS": {
-    lead: "Sarah Johnson",
-    members: ["Ravi", "Priya", "Suresh", "Lakshmi", "Vijay Kumar"]
-  }
-};
-
-const Home = () => {
+const Board = () => {
+  const { boardId } = useParams();
   const [tasks, setTasks] = useState([]);
   const [selectedTask, setSelectedTask] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // For create/edit modals
-  const [selectedTeam, setSelectedTeam] = useState("Mav-CDS");
-  const [editSelectedTeam, setEditSelectedTeam] = useState("");
+
+  const currentBoard = boardTeams[boardId];
+  const teamMembers = currentBoard?.members || [];
 
   useEffect(() => {
     const savedTasks = localStorage.getItem("jira-tasks");
     if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
-    } else {
-      setTasks(initialTasks);
-      localStorage.setItem("jira-tasks", JSON.stringify(initialTasks));
+      const allTasks = JSON.parse(savedTasks);
+      const boardTasks = allTasks.filter(task => 
+        teamMembers.includes(task.assignee)
+      );
+      setTasks(boardTasks);
     }
-  }, []);
+  }, [boardId]);
 
   const saveTasks = (updatedTasks) => {
+    const savedTasks = localStorage.getItem("jira-tasks");
+    const allTasks = savedTasks ? JSON.parse(savedTasks) : [];
+    
+    // Update or add tasks
+    const otherBoardTasks = allTasks.filter(task => 
+      !teamMembers.includes(task.assignee)
+    );
+    const newAllTasks = [...otherBoardTasks, ...updatedTasks];
+    
+    localStorage.setItem("jira-tasks", JSON.stringify(newAllTasks));
     setTasks(updatedTasks);
-    localStorage.setItem("jira-tasks", JSON.stringify(updatedTasks));
   };
 
   const handleStatusChange = (id, newStatus) => {
@@ -105,35 +68,31 @@ const Home = () => {
   const handleCreateTask = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const team = formData.get("team");
     const newTask = {
       id: Date.now(),
       name: formData.get("name"),
       story: formData.get("story"),
       status: "Defining Details",
-      lead: formData.get("lead"),
-      team: team,
+      assignee: formData.get("assignee"),
       startDate: formData.get("startDate"),
       endDate: formData.get("endDate"),
-      priority: formData.get("priority")
+      priority: formData.get("priority"),
+      board: boardId
     };
     saveTasks([...tasks, newTask]);
     setIsCreating(false);
-    setSelectedTeam("Mav-CDS"); // Reset to default
   };
 
   const handleUpdateTask = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const team = formData.get("team");
     const updated = tasks.map((task) =>
       task.id === selectedTask.id
         ? {
             ...task,
             name: formData.get("name"),
             story: formData.get("story"),
-            lead: formData.get("lead"),
-            team: team,
+            assignee: formData.get("assignee"),
             startDate: formData.get("startDate"),
             endDate: formData.get("endDate"),
             priority: formData.get("priority"),
@@ -193,13 +152,24 @@ const Home = () => {
       .toUpperCase();
   };
 
+  if (!currentBoard) {
+    return (
+      <div className="home-container">
+        <div className="board-not-found">
+          <h2>Board not found</h2>
+          <p>Please select a valid board from the navigation.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="home-container">
       {/* Header Section */}
       <header className="home-header">
-        <h1 className="company-name">TerraLogic Task Manager</h1>
+        <h1 className="company-name">{currentBoard.name} Board</h1>
         <p className="tagline">
-          Track your team's stories and progress in real-time ⚡
+          Team: {teamMembers.join(", ")} ⚡
         </p>
       </header>
 
@@ -234,71 +204,69 @@ const Home = () => {
       {/* Task Board Section */}
       <section className="board-section">
         <div className="board-grid">
-          {filteredTasks.map((task) => (
-            <div
-              key={task.id}
-              className={`board-card ${getStatusClass(task.status)}`}
-              onClick={() => {
-                setSelectedTask(task);
-                setEditSelectedTeam(task.team);
-              }}
-            >
-              <div className="card-header">
-                <div className="card-title-row">
-                  <h3>{task.story}</h3>
-                  <span
-                    className="priority-badge"
-                    style={{ backgroundColor: getPriorityColor(task.priority) }}
-                  >
-                    {task.priority}
-                  </span>
-                </div>
-              </div>
-
-              <div className="card-body">
-                <div className="team-badge-row">
-                  <span className="team-badge">{task.team}</span>
-                  <span className="lead-badge">👨‍💼 {task.lead}</span>
-                </div>
-
-                <div className="assignee-row">
-                  <div className="avatar" title={task.name}>
-                    {getInitials(task.name)}
-                  </div>
-                  <span className="assignee-name">{task.name}</span>
-                </div>
-
-                <div className="date-row">
-                  <div className="date-item">
-                    <span className="date-label">Start:</span>
-                    <span className="date-value">{task.startDate}</span>
-                  </div>
-                  <div className="date-item">
-                    <span className="date-label">End:</span>
-                    <span className="date-value">{task.endDate}</span>
-                  </div>
-                </div>
-
-                <div className="status-row">
-                  <select
-                    value={task.status}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      handleStatusChange(task.id, e.target.value);
-                    }}
-                    className="status-select"
-                    style={{ borderLeftColor: getStatusColor(task.status) }}
-                  >
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+          {filteredTasks.length === 0 ? (
+            <div className="empty-state">
+              <p>No tasks found. Create a new task to get started!</p>
             </div>
-          ))}
+          ) : (
+            filteredTasks.map((task) => (
+              <div
+                key={task.id}
+                className={`board-card ${getStatusClass(task.status)}`}
+                onClick={() => setSelectedTask(task)}
+              >
+                <div className="card-header">
+                  <div className="card-title-row">
+                    <h3>{task.story}</h3>
+                    <span
+                      className="priority-badge"
+                      style={{ backgroundColor: getPriorityColor(task.priority) }}
+                    >
+                      {task.priority}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="card-body">
+                  <div className="assignee-row">
+                    <div className="avatar" title={task.assignee}>
+                      {getInitials(task.assignee)}
+                    </div>
+                    <span className="assignee-name">{task.assignee}</span>
+                  </div>
+
+                  <div className="date-row">
+                    <div className="date-item">
+                      <span className="date-label">Start:</span>
+                      <span className="date-value">{task.startDate}</span>
+                    </div>
+                    <div className="date-item">
+                      <span className="date-label">End:</span>
+                      <span className="date-value">{task.endDate}</span>
+                    </div>
+                  </div>
+
+                  <div className="status-row">
+                    <select
+                      value={task.status}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(task.id, e.target.value);
+                      }}
+                      className="status-select"
+                      style={{ borderLeftColor: getStatusColor(task.status) }}
+                    >
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
@@ -317,48 +285,23 @@ const Home = () => {
             </div>
             <form onSubmit={handleCreateTask}>
               <div className="form-group">
-                <label>Task Name / Story</label>
+                <label>Task Name</label>
                 <input type="text" name="story" required />
               </div>
-
               <div className="form-group">
-                <label>Team</label>
-                <select 
-                  name="team" 
-                  value={selectedTeam}
-                  onChange={(e) => setSelectedTeam(e.target.value)}
-                  required
-                >
-                  {Object.keys(teamConfig).map((team) => (
-                    <option key={team} value={team}>
-                      {team}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Lead / Scrum Master</label>
-                <input 
-                  type="text" 
-                  name="lead" 
-                  value={teamConfig[selectedTeam].lead}
-                  readOnly
-                  className="read-only-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Assign to Team Member</label>
-                <select name="name" required>
-                  {teamConfig[selectedTeam].members.map((member) => (
+                <label>Assignee (Team Member)</label>
+                <select name="assignee" required>
+                  {teamMembers.map((member) => (
                     <option key={member} value={member}>
                       {member}
                     </option>
                   ))}
                 </select>
               </div>
-
+              <div className="form-group">
+                <label>Person Name</label>
+                <input type="text" name="name" required />
+              </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Start Date</label>
@@ -369,7 +312,6 @@ const Home = () => {
                   <input type="date" name="endDate" required />
                 </div>
               </div>
-
               <div className="form-group">
                 <label>Priority</label>
                 <select name="priority" required>
@@ -378,7 +320,6 @@ const Home = () => {
                   <option value="Low">Low</option>
                 </select>
               </div>
-
               <div className="modal-actions">
                 <button
                   type="button"
@@ -411,7 +352,7 @@ const Home = () => {
             </div>
             <form onSubmit={handleUpdateTask}>
               <div className="form-group">
-                <label>Task Name / Story</label>
+                <label>Task Name</label>
                 <input
                   type="text"
                   name="story"
@@ -419,45 +360,25 @@ const Home = () => {
                   required
                 />
               </div>
-
               <div className="form-group">
-                <label>Team</label>
-                <select 
-                  name="team" 
-                  value={editSelectedTeam}
-                  onChange={(e) => setEditSelectedTeam(e.target.value)}
-                  required
-                >
-                  {Object.keys(teamConfig).map((team) => (
-                    <option key={team} value={team}>
-                      {team}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Lead / Scrum Master</label>
-                <input 
-                  type="text" 
-                  name="lead" 
-                  value={teamConfig[editSelectedTeam].lead}
-                  readOnly
-                  className="read-only-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Assign to Team Member</label>
-                <select name="name" defaultValue={selectedTask.name} required>
-                  {teamConfig[editSelectedTeam].members.map((member) => (
+                <label>Assignee (Team Member)</label>
+                <select name="assignee" defaultValue={selectedTask.assignee} required>
+                  {teamMembers.map((member) => (
                     <option key={member} value={member}>
                       {member}
                     </option>
                   ))}
                 </select>
               </div>
-
+              <div className="form-group">
+                <label>Person Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={selectedTask.name}
+                  required
+                />
+              </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Start Date</label>
@@ -478,7 +399,6 @@ const Home = () => {
                   />
                 </div>
               </div>
-
               <div className="form-group">
                 <label>Status</label>
                 <select name="status" defaultValue={selectedTask.status} required>
@@ -489,7 +409,6 @@ const Home = () => {
                   ))}
                 </select>
               </div>
-
               <div className="form-group">
                 <label>Priority</label>
                 <select name="priority" defaultValue={selectedTask.priority} required>
@@ -498,7 +417,6 @@ const Home = () => {
                   <option value="Low">Low</option>
                 </select>
               </div>
-
               <div className="modal-actions">
                 <button
                   type="button"
@@ -528,4 +446,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default Board;
